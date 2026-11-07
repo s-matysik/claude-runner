@@ -28,7 +28,7 @@ runner = ClaudeRunner(
     allowed_tools=["Read", "Grep"],
     cwd="/path/to/project",
     timeout_s=300,
-    log_path="runs.jsonl",   # optional: one raw result per line
+    log_path="runs.jsonl",   # optional: one raw result per line (full model output, may be sensitive)
 )
 
 result = runner.run("Summarize the README in three bullets.")
@@ -111,7 +111,9 @@ The child process inherits your environment (the CLI needs it for authentication
 
 - POSIX only (uses process groups to kill a timed-out run).
 - Wraps the CLI's JSON output; field names depend on your installed `claude` version. Missing fields become `None` or empty.
-- Classification is heuristic text matching on error messages.
+- Classification is heuristic text matching on error messages. In particular, any error text containing "timeout" or "timed out" is treated as `transient`, even if the real cause is something a retry cannot fix.
+- The prompt is passed as a command line argument (`claude -p <prompt>`), so it is visible to other local users via `ps` and is limited by the OS argument size limit (`ARG_MAX`). Do not put secrets in prompts, and keep very large inputs in files the model reads instead.
+- The JSONL log (`log_path`) records the full raw response of every run, including the model's output text. It may contain sensitive data from your prompts, files or tool results; store it accordingly and do not commit it.
 - Synchronous, one process per `run()`; no streaming output.
 - The cost cap is checked between runs, not during one.
 

@@ -137,6 +137,14 @@ class ClaudeRunner:
             timed_out = True
             self._killpg(process)
             stdout, stderr = process.communicate()
+        except KeyboardInterrupt:
+            # Do not leave the child (and anything it spawned) running.
+            self._killpg(process)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            raise
         finally:
             with self._lock:
                 self._process = None

@@ -95,3 +95,44 @@ def test_log_path_writes_jsonl(fake, tmp_path):
     r.run("b")
     lines = [json.loads(x) for x in log.read_text().splitlines()]
     assert len(lines) == 2 and lines[0]["duration_api_ms"] == 4000 and lines[0]["ok"] is True
+
+
+def test_bare_429_is_not_rate_limit():
+    from claude_runner import detect_rate_limit
+
+    assert not detect_rate_limit("error at line 429")
+    assert not detect_rate_limit("the server is overloaded with requests")
+    assert detect_rate_limit("HTTP 429")
+    assert detect_rate_limit("429 Too Many Requests")
+    assert detect_rate_limit('{"type": "overloaded_error"}')
+    assert detect_rate_limit("rate_limit_error")
+
+
+def test_parse_failure_with_line_429_is_parse_error(fake):
+    fake.script({"stdout": "", "stderr": "syntax error at line 429", "exit": 1})
+    assert make(fake).run("hi").error_kind == "parse_error"
+
+
+def test_keyboard_interrupt_kills_child_and_reraises(fake, monkeypatch):
+    import os
+    import subprocess
+
+    import pytest
+
+    fake.script({"stdout": json.dumps(ok_json()), "sleep": 30})
+    seen = {}
+    real = subprocess.Popen.communicate
+
+    def interrupted(self, *a, **kw):
+        if "pid" not in seen:
+            seen["pid"] = self.pid
+            raise KeyboardInterrupt
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(subprocess.Popen, "communicate", interrupted)
+    runner = make(fake)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run("hi")
+    with pytest.raises(ProcessLookupError):
+        os.killpg(seen["pid"], 0)
+    assert runner._process is None

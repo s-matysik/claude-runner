@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
-#: Substrings (checked case-insensitively) that mark a failure as a rate or
-#: usage limit rather than a genuine model failure.
-RATE_LIMIT_MARKERS = ("rate limit", "usage limit", "overloaded", "429")
+#: Pattern (case-insensitive) that marks a failure as a rate or usage limit
+#: rather than a genuine model failure. A bare "429" or "overloaded" anywhere
+#: in the text is deliberately not enough: "error at line 429" is not a limit.
+RATE_LIMIT_RE = re.compile(
+    r"\bHTTP\s*429\b|\b429 Too Many Requests\b|\brate[_ ]limit|\busage[_ ]limit|overloaded_error",
+    re.IGNORECASE,
+)
 
 
 def detect_rate_limit(text: str | None) -> bool:
     """True if `text` looks like a rate/usage limit message."""
-    lowered = (text or "").lower()
-    return any(marker in lowered for marker in RATE_LIMIT_MARKERS)
+    return bool(RATE_LIMIT_RE.search(text or ""))
 
 
 def _num(value: Any) -> float | None:
